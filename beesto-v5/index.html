@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en" x-data="app()" x-init="init()" :class="{ 'dark': isDark }">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beesto AI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Sora','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+      colors: {
+        honey: { 300:'#fcd34d',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309' },
+        ink:   { 50:'#f8f8f8',100:'#f0f0f0',200:'#e2e2e2',300:'#c8c8c8',400:'#a0a0a0',500:'#717171',600:'#4a4a4a',700:'#2d2d2d',800:'#1e1e1e',850:'#181818',900:'#111111',950:'#0a0a0a' }
+      }
+    }
+  }
+}
+</script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="font-sans antialiased h-screen overflow-hidden dark:bg-ink-950 bg-ink-50 transition-colors duration-300">
+
+<!-- ═══════════════════════ LIGHTBOX ═══════════════════════ -->
+<div x-show="showLightbox"
+  class="fixed inset-0 z-[200] flex items-center justify-center anim-fade-in"
+  style="background:rgba(0,0,0,0.93);backdrop-filter:blur(14px)"
+  @click="showLightbox=false">
+  <div class="relative max-w-[92vw] max-h-[92vh]" @click.stop>
+    <img :src="lightboxSrc" class="max-w-full max-h-[88vh] rounded-2xl shadow-2xl object-contain select-none">
+    <button @click="showLightbox=false"
+      class="absolute -top-4 -right-4 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-xl transition-all
+             dark:bg-ink-700 dark:hover:bg-ink-600 bg-white hover:bg-ink-100 dark:text-white text-ink-900">✕</button>
+  </div>
+</div>
+
+<!-- ════════════════════ ONBOARDING MODAL ════════════════════ -->
+<div x-show="showOnboarding"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+  x-transition:enter="transition ease-out duration-250"
+  x-transition:enter-start="opacity-0"
+  x-transition:enter-end="opacity-100">
+  <div class="absolute inset-0 dark:bg-ink-950 bg-ink-100" style="backdrop-filter:blur(20px)"></div>
+  <div class="relative w-full max-w-md anim-scale-in">
+    <div class="rounded-3xl dark:bg-ink-900 bg-white border dark:border-ink-800 border-ink-200 shadow-2xl overflow-hidden">
+      <div class="h-1 w-full" style="background:linear-gradient(90deg,#f59e0b,#fbbf24,#d97706)"></div>
+      <div class="p-8">
+        <div class="flex flex-col items-center text-center mb-8">
+          <div class="w-16 h-16 rounded-2xl bg-honey-500 flex items-center justify-center text-3xl mb-4 shadow-xl shadow-honey-500/30">🐝</div>
+          <h1 class="text-2xl font-bold dark:text-white text-ink-900 tracking-tight">Welcome to Beesto AI</h1>
+          <p class="dark:text-ink-400 text-ink-500 text-sm mt-2 leading-relaxed">Before we start, what should I call you?<br>I'll remember your name across conversations.</p>
+        </div>
+        <div class="space-y-3">
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg pointer-events-none">👤</span>
+            <input x-model="nameInput" @keydown.enter="submitName()" type="text"
+              placeholder="Your name…" maxlength="40" autofocus
+              class="w-full pl-11 pr-4 py-3.5 rounded-2xl text-sm font-medium dark:bg-ink-800 bg-ink-50 dark:text-white text-ink-900 border dark:border-ink-700 border-ink-200 outline-none focus:border-honey-500/70 focus:ring-2 focus:ring-honey-500/20 placeholder-ink-400 transition-all">
+          </div>
+          <button @click="submitName()" :disabled="!nameInput.trim()"
+            :class="nameInput.trim() ? 'bg-honey-500 hover:bg-honey-400 text-ink-950 shadow-lg shadow-honey-500/30 cursor-pointer' : 'dark:bg-ink-800 bg-ink-100 dark:text-ink-600 text-ink-400 cursor-not-allowed'"
+            class="w-full py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200">Let's go →</button>
+          <button @click="userName='Guest'; showOnboarding=false; saveSettings()"
+            class="w-full py-2 text-xs dark:text-ink-600 text-ink-400 hover:dark:text-ink-400 hover:text-ink-600 transition-colors">Skip for now</button>
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-center gap-5 mt-4 flex-wrap">
+      <span class="text-xs dark:text-ink-600 text-ink-400 flex items-center gap-1.5">🖼️ Vision AI</span>
+      <span class="text-xs dark:text-ink-600 text-ink-400 flex items-center gap-1.5">📄 PDF Reader</span>
+      <span class="text-xs dark:text-ink-600 text-ink-400 flex items-center gap-1.5">🎵 Whisper</span>
+      <span class="text-xs dark:text-ink-600 text-ink-400 flex items-center gap-1.5">⚡ 100+ Models</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MAIN LAYOUT ════════════════════ -->
+<div class="flex h-full">
+
+<!-- ════════════ SIDEBAR ════════════ -->
+<aside id="sidebar"
+  :class="sidebarOpen ? 'w-[260px]' : 'w-0 -translate-x-full md:w-0 md:translate-x-0'"
+  class="fixed md:relative z-40 h-full flex flex-col transition-all duration-300 ease-in-out overflow-hidden dark:bg-ink-900 bg-white border-r dark:border-ink-800 border-ink-200 shrink-0">
+  <div class="flex flex-col h-full min-w-[260px]">
+
+    <!-- Logo -->
+    <div class="flex items-center gap-3 px-5 py-5 border-b dark:border-ink-800 border-ink-200">
+      <div class="w-8 h-8 rounded-xl bg-honey-500 flex items-center justify-center text-lg shadow-lg shadow-honey-500/30">🐝</div>
+      <span class="font-semibold text-base dark:text-white text-ink-900 tracking-tight">Beesto AI</span>
+      <button @click="sidebarOpen=false" class="ml-auto md:hidden p-1.5 rounded-lg dark:hover:bg-ink-800 hover:bg-ink-100 dark:text-ink-400 text-ink-500">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- User strip -->
+    <div x-show="userName" class="mx-3 mt-3 px-3 py-2.5 rounded-xl dark:bg-ink-800/60 bg-ink-50 border dark:border-ink-700/60 border-ink-200 flex items-center gap-2.5">
+      <div class="w-7 h-7 rounded-lg bg-honey-500 flex items-center justify-center text-xs font-bold text-ink-950 shrink-0" x-text="userInitials"></div>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-semibold dark:text-ink-200 text-ink-700 truncate" x-text="userName"></p>
+        <p class="text-[10px] dark:text-ink-500 text-ink-400">Your profile</p>
+      </div>
+      <button @click="showSettings=true; settingsTab='persona'" class="p-1 rounded-lg dark:hover:bg-ink-700 hover:bg-ink-200 dark:text-ink-500 text-ink-400 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </button>
+    </div>
+
+    <!-- New Chat -->
+    <div class="px-3 pt-3 pb-2">
+      <button @click="newChat()"
+        class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium dark:bg-ink-800 bg-ink-100 dark:hover:bg-ink-700 hover:bg-ink-200 dark:text-ink-200 text-ink-700 transition-all group">
+        <svg class="w-4 h-4 dark:text-ink-400 text-ink-500 group-hover:text-honey-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+        New conversation
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div class="px-3 pb-2">
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 dark:text-ink-500 text-ink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" x-model="searchQuery" placeholder="Search conversations…"
+          class="w-full pl-8 pr-3 py-2 text-xs rounded-lg dark:bg-ink-800 bg-ink-100 dark:text-ink-300 text-ink-700 placeholder-ink-400 border-0 outline-none focus:ring-1 focus:ring-honey-500/50 transition-all">
+      </div>
+    </div>
+
+    <!-- Chat list -->
+    <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 sidebar-scroll">
+      <template x-if="filteredChats.length === 0">
+        <p class="px-3 py-6 text-center text-xs dark:text-ink-600 text-ink-400">No conversations yet</p>
+      </template>
+      <template x-for="chat in filteredChats" :key="chat.id">
+        <div @click="loadChat(chat.id)"
+          :class="currentChatId===chat.id ? 'dark:bg-ink-800 bg-ink-100 dark:text-white text-ink-900' : 'dark:text-ink-400 text-ink-600 dark:hover:bg-ink-800/60 hover:bg-ink-100/80 dark:hover:text-ink-200 hover:text-ink-900'"
+          class="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150">
+          <svg class="w-3.5 h-3.5 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          <span x-text="chat.title" class="text-xs truncate flex-1"></span>
+          <button @click.stop="deleteChat(chat.id)"
+            class="opacity-0 group-hover:opacity-100 p-1 rounded-md dark:hover:bg-red-500/20 hover:bg-red-100 dark:text-ink-500 text-ink-400 hover:text-red-500 transition-all shrink-0">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="p-3 border-t dark:border-ink-800 border-ink-200 space-y-1">
+      <button @click="showSettings=true; settingsTab='keys'"
+        class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium dark:text-ink-400 text-ink-600 dark:hover:bg-ink-800 hover:bg-ink-100 transition-all">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </button>
+      <button @click="toggleTheme()"
+        class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium dark:text-ink-400 text-ink-600 dark:hover:bg-ink-800 hover:bg-ink-100 transition-all">
+        <svg x-show="isDark"  class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg x-show="!isDark" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        <span x-text="isDark ? 'Light mode' : 'Dark mode'"></span>
+      </button>
+    </div>
+  </div>
+</aside>
+
+<!-- Mobile overlay -->
+<div x-show="sidebarOpen" @click="sidebarOpen=false" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 md:hidden" x-transition.opacity></div>
+
+<!-- ════════════ MAIN ════════════ -->
+<main class="flex-1 flex flex-col h-full min-w-0 relative">
+
+  <!-- ── TOP BAR ──────────────────────────────────────── -->
+  <header class="flex items-center gap-3 px-4 py-3 border-b dark:border-ink-800 border-ink-200 dark:bg-ink-950/80 bg-white/80 backdrop-blur-xl z-20 shrink-0">
+    <button @click="sidebarOpen=!sidebarOpen"
+      class="p-2 rounded-xl dark:hover:bg-ink-800 hover:bg-ink-100 dark:text-ink-400 text-ink-500 transition-all">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+
+    <div class="flex-1 min-w-0">
+      <h1 class="text-sm font-semibold truncate dark:text-white text-ink-900" x-text="currentChat?.title || 'Beesto AI'"></h1>
+      <p x-show="currentChat?.messages?.length > 0"
+        class="text-[10px] dark:text-ink-600 text-ink-400"
+        x-text="`${currentChat?.messages?.length || 0} messages`"></p>
+    </div>
+
+    <!-- Live generation timer -->
+    <div x-show="isGenerating"
+      class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono dark:bg-honey-500/10 bg-honey-50 dark:text-honey-400 text-honey-600 border dark:border-honey-500/20 border-honey-200 anim-pulse">
+      <span class="w-1.5 h-1.5 rounded-full bg-honey-400 shrink-0"></span>
+      <span x-text="elapsedFormatted"></span>
+    </div>
+
+    <!-- Route badge (idle) -->
+    <div x-show="!isGenerating"
+      class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium dark:bg-ink-800 bg-ink-100 dark:text-ink-400 text-ink-600 border dark:border-ink-700 border-ink-200">
+      <span class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>
+      <span x-text="routeLabel" class="max-w-[160px] truncate"></span>
+    </div>
+
+    <!-- Model picker -->
+    <div class="relative" x-data="{open:false}">
+      <button @click="open=!open"
+        class="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-xl text-xs font-medium dark:bg-ink-800 bg-ink-100 dark:text-ink-300 text-ink-700 dark:hover:bg-ink-700 hover:bg-ink-200 border dark:border-ink-700 border-ink-200 transition-all">
+        <svg class="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <span>Models</span>
+        <svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div x-show="open" @click.away="open=false"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0 scale-95 -translate-y-1"
+        x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+        class="absolute right-0 top-full mt-2 w-80 rounded-2xl dark:bg-ink-800 bg-white border dark:border-ink-700 border-ink-200 shadow-2xl dark:shadow-black/50 z-50 overflow-hidden">
+        <div class="px-4 py-3 border-b dark:border-ink-700 border-ink-100">
+          <p class="text-xs font-semibold dark:text-white text-ink-900">Default Model</p>
+          <p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Smart routing auto-selects vision/audio models for files</p>
+        </div>
+        <div class="p-1.5 max-h-[400px] overflow-y-auto sidebar-scroll">
+          <template x-for="provider in modelProviders" :key="provider.name">
+            <div class="mb-1">
+              <p class="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest dark:text-ink-500 text-ink-400" x-text="provider.name"></p>
+              <template x-for="model in provider.models" :key="model.id">
+                <button @click="selectedModel=model; saveSettings(); open=false"
+                  :class="selectedModel.id===model.id ? 'dark:bg-honey-500/15 bg-honey-50 dark:text-honey-400 text-honey-700' : 'dark:text-ink-300 text-ink-700 dark:hover:bg-ink-700/50 hover:bg-ink-50'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between gap-2">
+                  <span x-text="model.name" class="font-medium"></span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <span x-show="model.vision" class="text-[9px] px-1.5 py-0.5 rounded-full dark:bg-purple-500/20 bg-purple-100 dark:text-purple-400 text-purple-600 font-semibold">Vision</span>
+                    <span x-show="model.fast"   class="text-[9px] px-1.5 py-0.5 rounded-full dark:bg-green-500/20  bg-green-100  dark:text-green-400  text-green-600  font-semibold">Fast</span>
+                  </div>
+                </button>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════════ MESSAGES ════════════ -->
+  <div id="chat-messages" class="flex-1 overflow-y-auto chat-scroll relative"
+    @dragover.prevent="dragOver=true" @dragleave.self="dragOver=false" @drop.prevent="handleDrop($event)">
+
+    <!-- Drag overlay -->
+    <div x-show="dragOver" x-transition.opacity
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background:rgba(0,0,0,0.65);backdrop-filter:blur(6px)">
+      <div class="rounded-3xl border-2 border-dashed border-honey-500 px-16 py-14 text-center dark:bg-ink-900/90 bg-white/90">
+        <div class="text-5xl mb-3">📎</div>
+        <p class="font-semibold text-lg dark:text-white text-ink-900">Drop your files here</p>
+        <p class="text-sm mt-1.5 dark:text-ink-400 text-ink-500">Images · PDFs · Audio · Video · Code</p>
+      </div>
+    </div>
+
+    <!-- ════ WELCOME ════ -->
+    <div x-show="!currentChat || currentChat.messages.length === 0"
+      class="h-full flex flex-col items-center justify-center p-6">
+      <div class="w-full max-w-2xl anim-fade-up">
+        <div class="flex flex-col items-center mb-8">
+          <div class="w-14 h-14 rounded-2xl bg-honey-500 flex items-center justify-center text-3xl mb-4 shadow-xl shadow-honey-500/25">🐝</div>
+          <h2 class="text-3xl font-bold dark:text-white text-ink-900 tracking-tight text-center" x-text="welcomeGreeting"></h2>
+          <p class="dark:text-ink-500 text-ink-400 text-sm mt-2 text-center">Ask anything · Attach files · No model switching needed</p>
+        </div>
+        <div class="flex flex-wrap justify-center gap-2 mb-8">
+          <template x-for="cap in capabilities" :key="cap.label">
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium dark:bg-ink-800 bg-white border dark:border-ink-700 border-ink-200 dark:text-ink-300 text-ink-600">
+              <span x-text="cap.icon"></span><span x-text="cap.label"></span>
+            </div>
+          </template>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <template x-for="s in suggestions" :key="s.text">
+            <button @click="sendMessage(s.text)"
+              class="group relative flex flex-col gap-2 p-4 rounded-2xl text-left transition-all duration-200 dark:bg-ink-900 bg-white border dark:border-ink-800 border-ink-200 dark:hover:border-honey-500/40 hover:border-honey-400/50 dark:hover:bg-ink-800/80 hover:shadow-md">
+              <span class="text-xl" x-text="s.icon"></span>
+              <div>
+                <p class="text-sm font-semibold dark:text-ink-200 text-ink-800 leading-snug" x-text="s.title"></p>
+                <p class="text-xs dark:text-ink-500 text-ink-400 mt-0.5" x-text="s.subtitle"></p>
+              </div>
+              <svg class="absolute right-4 top-4 w-4 h-4 dark:text-ink-700 text-ink-300 group-hover:text-honey-500 transition-colors opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ MESSAGE LIST ════ -->
+    <div x-show="currentChat && currentChat.messages.length > 0" class="max-w-3xl mx-auto px-4 pt-6 pb-4">
+      <template x-for="(msg, idx) in (currentChat?.messages || [])" :key="idx">
+        <div class="mb-6 anim-fade-up" :style="`animation-delay:${Math.min(idx*18,120)}ms`">
+
+          <!-- USER MESSAGE -->
+          <template x-if="msg.role === 'user'">
+            <div class="flex justify-end">
+              <div class="max-w-[82%]">
+
+                <!-- Image attachments — clickable -->
+                <template x-if="msg.attachments && msg.attachments.length > 0">
+                  <div class="flex flex-wrap gap-2 mb-2.5 justify-end">
+                    <template x-for="att in msg.attachments" :key="att.name">
+                      <template x-if="att.type && att.type.startsWith('image/')">
+                        <div class="relative group cursor-zoom-in" @click="openLightbox(att.dataUrl)">
+                          <img :src="att.dataUrl"
+                            class="max-w-[220px] max-h-[220px] object-cover rounded-2xl border dark:border-ink-700 border-ink-200 shadow-md transition-all duration-200 group-hover:shadow-xl group-hover:scale-[1.02]">
+                          <div class="absolute inset-0 rounded-2xl flex items-end justify-center pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span class="text-white text-[10px] font-semibold bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-sm">🔍 Expand</span>
+                          </div>
+                          <span class="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-purple-600 text-white font-bold shadow">Vision</span>
+                        </div>
+                      </template>
+                      <template x-if="!att.type || !att.type.startsWith('image/')">
+                        <div class="flex items-center gap-2 px-3 py-2 rounded-xl dark:bg-ink-800 bg-ink-100 text-xs dark:text-ink-300 text-ink-600 border dark:border-ink-700 border-ink-200">
+                          <span x-text="att.icon || '📄'"></span>
+                          <span x-text="att.name" class="font-medium truncate max-w-[130px]"></span>
+                          <span x-show="att.routeLabel" x-text="att.routeLabel"
+                            class="text-[9px] px-1.5 py-0.5 rounded-full dark:bg-honey-500/20 bg-honey-100 dark:text-honey-400 text-honey-700 font-bold"></span>
+                        </div>
+                      </template>
+                    </template>
+                  </div>
+                </template>
+
+                <template x-if="msg.content">
+                  <div class="px-4 py-3 rounded-3xl rounded-tr-lg text-sm leading-relaxed dark:bg-honey-500/15 bg-honey-50 dark:text-ink-100 text-ink-900 border dark:border-honey-500/20 border-honey-200">
+                    <span x-text="msg.content"></span>
+                  </div>
+                </template>
+                <p class="text-right text-[10px] dark:text-ink-700 text-ink-400 mt-1.5 pr-1" x-text="fmtTime(msg.timestamp)"></p>
+              </div>
+            </div>
+          </template>
+
+          <!-- ASSISTANT MESSAGE -->
+          <template x-if="msg.role === 'assistant'">
+            <div class="flex gap-3 group">
+
+              <!-- Avatar -->
+              <div class="relative shrink-0 mt-0.5">
+                <div class="w-7 h-7 rounded-xl bg-honey-500 flex items-center justify-center text-sm shadow-md shadow-honey-500/20">🐝</div>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <!-- Header -->
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <span class="text-xs font-semibold dark:text-honey-400 text-honey-600">Beesto AI</span>
+                  <span x-show="msg.routeInfo" x-text="msg.routeInfo"
+                    class="text-[10px] px-1.5 py-0.5 rounded-full dark:bg-ink-800 bg-ink-100 dark:text-ink-500 text-ink-400 font-medium border dark:border-ink-700/40 border-ink-200"></span>
+                  <span x-show="msg.generationMs"
+                    x-text="'⚡ ' + fmtDur(msg.generationMs)"
+                    class="text-[10px] px-1.5 py-0.5 rounded-full dark:bg-green-500/10 bg-green-50 dark:text-green-400 text-green-700 font-medium border dark:border-green-500/20 border-green-200"></span>
+                </div>
+
+                <!-- Content -->
+                <div class="prose-beesto text-sm dark:text-ink-200 text-ink-800 leading-relaxed" x-html="renderMarkdown(msg.content)"></div>
+
+                <!-- Footer -->
+                <div class="flex items-center justify-between mt-2.5">
+                  <div class="flex items-center gap-1.5">
+                    <span x-show="msg.wordCount > 0" class="text-[10px] dark:text-ink-700 text-ink-400" x-text="`${msg.wordCount} words`"></span>
+                    <span x-show="msg.wordCount > 0 && msg.timestamp" class="text-[10px] dark:text-ink-800 text-ink-300">·</span>
+                    <span class="text-[10px] dark:text-ink-700 text-ink-400" x-text="fmtTime(msg.timestamp)"></span>
+                  </div>
+                  <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button @click="copyMessage(msg.content, $el)"
+                      class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] dark:text-ink-500 text-ink-400 dark:hover:bg-ink-800 hover:bg-ink-100 dark:hover:text-ink-300 hover:text-ink-600 transition-all font-medium">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy
+                    </button>
+                    <button x-show="idx===currentChat.messages.length-1 && !isGenerating" @click="regenerate()"
+                      class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] dark:text-ink-500 text-ink-400 dark:hover:bg-ink-800 hover:bg-ink-100 dark:hover:text-ink-300 hover:text-ink-600 transition-all font-medium">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>Retry
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ════ STREAMING ════ -->
+      <div x-show="isGenerating" class="flex gap-3 mb-6 anim-fade-in">
+        <div class="relative shrink-0 mt-0.5">
+          <div class="w-7 h-7 rounded-xl bg-honey-500 flex items-center justify-center text-sm shadow-md anim-glow">🐝</div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <span class="text-xs font-semibold dark:text-honey-400 text-honey-600">Beesto AI</span>
+
+            <!-- Thinking: show label -->
+            <span x-show="processingPhase === 'thinking' && processingLabel"
+              x-text="processingLabel"
+              class="text-[10px] px-2 py-0.5 rounded-full dark:bg-honey-500/15 bg-honey-50 dark:text-honey-400 text-honey-600 font-medium border dark:border-honey-500/20 border-honey-200 anim-pulse"></span>
+
+            <!-- Writing: show word count -->
+            <span x-show="processingPhase === 'writing' && streamingWordCount > 0"
+              class="text-[10px] px-1.5 py-0.5 rounded-full dark:bg-ink-800 bg-ink-100 dark:text-ink-400 text-ink-500 font-medium border dark:border-ink-700/40 border-ink-200"
+              x-text="`${streamingWordCount} words…`"></span>
+
+            <span class="text-[10px] dark:text-ink-600 text-ink-400 font-mono" x-text="elapsedFormatted"></span>
+          </div>
+
+          <!-- Live content + blinking cursor -->
+          <div x-show="streamingContent" class="prose-beesto text-sm dark:text-ink-200 text-ink-800 leading-relaxed">
+            <span x-html="renderMarkdown(streamingContent)"></span><span class="streaming-cursor"></span>
+          </div>
+
+          <!-- Thinking dots -->
+          <div x-show="!streamingContent" class="flex items-center gap-1.5 py-1">
+            <div class="w-2 h-2 rounded-full bg-honey-500 anim-dot" style="animation-delay:0ms"></div>
+            <div class="w-2 h-2 rounded-full bg-honey-500 anim-dot" style="animation-delay:200ms"></div>
+            <div class="w-2 h-2 rounded-full bg-honey-500 anim-dot" style="animation-delay:400ms"></div>
+          </div>
+        </div>
+      </div>
+      <div class="h-4"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div x-show="toast"
+    x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2"
+    x-transition:leave="transition ease-in duration-150"  x-transition:leave-end="opacity-0 translate-y-1"
+    class="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-xs font-medium dark:bg-ink-700 bg-ink-800 text-white shadow-xl pointer-events-none"
+    x-text="toast"></div>
+
+  <!-- ════════════ INPUT BAR ════════════ -->
+  <div class="border-t dark:border-ink-800 border-ink-200 dark:bg-ink-950/90 bg-white/90 backdrop-blur-xl shrink-0 z-10">
+
+    <!-- Attachment chips -->
+    <div x-show="attachments.length > 0" class="px-4 pt-3 flex flex-wrap gap-2">
+      <template x-for="(att, i) in attachments" :key="i">
+        <div class="relative group">
+          <template x-if="att.type && att.type.startsWith('image/')">
+            <div class="relative cursor-zoom-in" @click="openLightbox(att.dataUrl)">
+              <img :src="att.dataUrl" class="w-14 h-14 object-cover rounded-xl border dark:border-ink-700 border-ink-200 shadow-sm hover:scale-105 transition-transform">
+              <span class="absolute -bottom-1 -right-1 text-[9px] px-1.5 py-0.5 rounded-full bg-purple-600 text-white font-bold shadow">Vision</span>
+            </div>
+          </template>
+          <template x-if="att.type === 'application/pdf'">
+            <div class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs border dark:bg-red-500/10 bg-red-50 dark:text-red-300 text-red-700 dark:border-red-500/20 border-red-200">
+              📄 <span x-text="att.name" class="max-w-[100px] truncate font-medium"></span>
+              <span class="text-[9px] bg-red-500 text-white px-1 py-0.5 rounded font-bold">PDF</span>
+            </div>
+          </template>
+          <template x-if="att.type?.startsWith('audio/') || att.type?.startsWith('video/')">
+            <div class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs border dark:bg-blue-500/10 bg-blue-50 dark:text-blue-300 text-blue-700 dark:border-blue-500/20 border-blue-200">
+              <span x-text="att.type?.startsWith('audio/') ? '🎵' : '🎬'"></span>
+              <span x-text="att.name" class="max-w-[100px] truncate font-medium"></span>
+              <span class="text-[9px] bg-blue-500 text-white px-1 py-0.5 rounded font-bold">Whisper</span>
+            </div>
+          </template>
+          <template x-if="att.type && !att.type.startsWith('image/') && att.type !== 'application/pdf' && !att.type.startsWith('audio/') && !att.type.startsWith('video/')">
+            <div class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs border dark:bg-ink-800 bg-ink-100 dark:text-ink-300 text-ink-600 dark:border-ink-700 border-ink-200">
+              📝 <span x-text="att.name" class="max-w-[100px] truncate font-medium"></span>
+            </div>
+          </template>
+          <button @click="attachments.splice(i,1)"
+            class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all shadow-sm leading-none">×</button>
+        </div>
+      </template>
+    </div>
+
+    <div class="p-3 max-w-3xl mx-auto">
+      <div class="flex items-end gap-2 rounded-2xl border transition-all duration-200
+                  dark:bg-ink-900 bg-white dark:border-ink-700 border-ink-200
+                  focus-within:ring-2 focus-within:ring-honey-500/20 focus-within:dark:border-honey-500/50 focus-within:border-honey-500/40">
+
+        <!-- Attach -->
+        <button @click="$refs.fileInput.click()" title="Attach file"
+          class="p-2.5 mb-1 ml-1 rounded-xl dark:text-ink-500 text-ink-400 dark:hover:text-ink-200 hover:text-ink-700 dark:hover:bg-ink-800 hover:bg-ink-100 transition-all shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <input type="file" x-ref="fileInput" @change="handleFileSelect($event)" multiple
+          accept="image/*,.pdf,.txt,.csv,.js,.py,.html,.css,.json,.md,.xml,.yaml,.yml,.ts,.jsx,.tsx,.java,.cpp,.c,.rb,.go,.rs,.php,.swift,.kt,.mp3,.mp4,.wav,.m4a,.ogg,.webm,.mpeg"
+          class="hidden">
+
+        <!-- Textarea -->
+        <textarea x-ref="msgInput" x-model="userMessage"
+          @keydown.enter.prevent="if(!$event.shiftKey && !isGenerating) sendMessage()"
+          @input="autoResize($event.target)"
+          rows="1"
+          :placeholder="userName ? `Message Beesto AI, ${userName.split(' ')[0]}…` : 'Message Beesto AI…'"
+          class="flex-1 bg-transparent dark:text-white text-ink-900 placeholder-ink-400 resize-none outline-none text-sm leading-relaxed py-3 px-1 max-h-[180px] font-sans"
+          style="min-height:24px"></textarea>
+
+        <!-- Word count -->
+        <div x-show="inputWordCount > 0" class="flex flex-col items-end justify-end pb-3 pr-0.5 shrink-0">
+          <span class="text-[10px] dark:text-ink-700 text-ink-400 font-mono" x-text="inputWordCount + 'w'"></span>
+        </div>
+
+        <!-- Stop -->
+        <button x-show="isGenerating" @click="stopGeneration()" title="Stop"
+          class="p-2.5 mb-1 mr-1 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all shrink-0">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+        </button>
+
+        <!-- Send -->
+        <button x-show="!isGenerating" @click="sendMessage()"
+          :disabled="!userMessage.trim() && attachments.length===0"
+          :class="(userMessage.trim()||attachments.length>0) ? 'bg-honey-500 hover:bg-honey-400 text-ink-950 shadow-md shadow-honey-500/25' : 'dark:bg-ink-800 bg-ink-100 dark:text-ink-600 text-ink-400 cursor-not-allowed'"
+          class="p-2.5 mb-1 mr-1 rounded-xl transition-all duration-200 shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+
+      <!-- Input footer -->
+      <div class="flex items-center justify-between mt-2 px-0.5">
+        <p class="text-[10px] dark:text-ink-700 text-ink-400">
+          Images → Vision · PDFs → Extract → Analyse · Audio → Whisper
+        </p>
+        <p class="text-[10px] dark:text-ink-700 text-ink-400 flex items-center gap-1">
+          <span class="kb">⏎</span> send
+          <span class="mx-1 opacity-30">·</span>
+          <span class="kb">⇧⏎</span> newline
+        </p>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ══════════════════ SETTINGS MODAL ══════════════════ -->
+<div x-show="showSettings" class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
+  x-transition:leave="transition ease-in duration-150"  x-transition:leave-end="opacity-0">
+  <div class="absolute inset-0 bg-black/65 backdrop-blur-md" @click="showSettings=false"></div>
+  <div class="relative w-full max-w-[560px] max-h-[90vh] flex flex-col rounded-3xl dark:bg-ink-900 bg-white border dark:border-ink-800 border-ink-200 shadow-2xl dark:shadow-black/60 overflow-hidden anim-scale-in">
+
+    <div class="flex items-center justify-between px-6 py-5 border-b dark:border-ink-800 border-ink-200 shrink-0">
+      <div>
+        <h2 class="text-base font-bold dark:text-white text-ink-900">Settings</h2>
+        <p class="text-xs dark:text-ink-500 text-ink-400 mt-0.5">Configure Beesto AI to your preferences</p>
+      </div>
+      <button @click="showSettings=false" class="p-2 rounded-xl dark:hover:bg-ink-800 hover:bg-ink-100 dark:text-ink-400 text-ink-500 transition-all">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 px-4 pt-3 border-b dark:border-ink-800 border-ink-200 shrink-0 overflow-x-auto">
+      <template x-for="tab in [{id:'keys',label:'API Keys',icon:'🔑'},{id:'persona',label:'Profile',icon:'👤'},{id:'routing',label:'Routing',icon:'🔀'},{id:'appearance',label:'Appearance',icon:'🎨'},{id:'data',label:'Data',icon:'💾'}]" :key="tab.id">
+        <button @click="settingsTab=tab.id"
+          :class="settingsTab===tab.id ? 'dark:text-honey-400 text-honey-600 border-b-2 border-honey-500 dark:bg-honey-500/5 bg-honey-50/50' : 'dark:text-ink-500 text-ink-400 border-b-2 border-transparent dark:hover:text-ink-300 hover:text-ink-600'"
+          class="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition-all whitespace-nowrap rounded-t-lg -mb-px">
+          <span x-text="tab.icon"></span><span x-text="tab.label"></span>
+        </button>
+      </template>
+    </div>
+
+    <div class="flex-1 overflow-y-auto sidebar-scroll p-6 space-y-4">
+
+      <!-- API KEYS -->
+      <div x-show="settingsTab==='keys'" class="space-y-4">
+        <div class="flex items-center gap-3 p-4 rounded-2xl border dark:bg-green-500/5 bg-green-50 dark:border-green-500/20 border-green-200">
+          <div class="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center text-lg">⚡</div>
+          <div class="flex-1">
+            <p class="text-xs font-bold dark:text-green-400 text-green-700">Groq — Active (Built-in, No Key Needed)</p>
+            <p class="text-[11px] dark:text-green-600/80 text-green-600 mt-0.5">LLaMA 3.3 · Vision via LLaMA 4 Scout · Whisper · Always free</p>
+          </div>
+          <div class="w-2 h-2 rounded-full bg-green-400 anim-pulse shrink-0"></div>
+        </div>
+        <p class="text-xs dark:text-ink-500 text-ink-400 font-medium px-1">Add keys to unlock more providers:</p>
+        <template x-for="p in apiKeyProviders" :key="p.id">
+          <div class="rounded-2xl dark:bg-ink-800/40 bg-ink-50 border dark:border-ink-700/60 border-ink-200 overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 border-b dark:border-ink-700/40 border-ink-100">
+              <div class="flex items-center gap-2.5">
+                <span class="text-base" x-text="p.emoji"></span>
+                <div>
+                  <span class="text-xs font-bold dark:text-ink-200 text-ink-700" x-text="p.name"></span>
+                  <p class="text-[11px] dark:text-ink-500 text-ink-400" x-text="p.hint"></p>
+                </div>
+              </div>
+              <a :href="p.link" target="_blank" class="text-[11px] text-honey-500 hover:text-honey-400 font-semibold transition-colors ml-2">Get key →</a>
+            </div>
+            <div class="flex gap-2 p-3">
+              <input :type="p.visible ? 'text' : 'password'"
+                :value="apiKeys[p.id] || ''"
+                @input="apiKeys[p.id]=$event.target.value; saveSettings()"
+                :placeholder="p.placeholder"
+                class="flex-1 px-3 py-2 text-xs rounded-xl font-mono dark:bg-ink-900 bg-white dark:text-ink-200 text-ink-800 border dark:border-ink-700 border-ink-200 outline-none focus:border-honey-500/60 focus:ring-1 focus:ring-honey-500/20 transition-all placeholder-ink-500">
+              <button @click="p.visible=!p.visible"
+                class="px-3 rounded-xl dark:bg-ink-900 bg-white border dark:border-ink-700 border-ink-200 dark:text-ink-400 text-ink-500 dark:hover:bg-ink-700 hover:bg-ink-100 transition-all text-sm">
+                <span x-text="p.visible ? '🙈' : '👁️'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- PROFILE -->
+      <div x-show="settingsTab==='persona'" class="space-y-5">
+        <div>
+          <label class="settings-label">Your Name</label>
+          <p class="settings-hint mb-2">Beesto AI will address you personally</p>
+          <div class="flex gap-2">
+            <div class="relative flex-1">
+              <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-base pointer-events-none">👤</span>
+              <input type="text" :value="userName" @input="userName=$event.target.value" @change="saveSettings()"
+                placeholder="Enter your name…" maxlength="40"
+                class="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl dark:bg-ink-800 bg-ink-50 dark:text-white text-ink-900 border dark:border-ink-700 border-ink-200 outline-none focus:border-honey-500/60 focus:ring-1 focus:ring-honey-500/20 transition-all placeholder-ink-400">
+            </div>
+            <button @click="saveSettings(); showToast('Name saved!')"
+              class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-honey-500 hover:bg-honey-400 text-ink-950 transition-all shadow-md shadow-honey-500/20">Save</button>
+          </div>
+        </div>
+        <div>
+          <label class="settings-label">System Prompt</label>
+          <p class="settings-hint mb-2">Define Beesto AI's personality and behavior</p>
+          <textarea x-model="systemPrompt" @change="saveSettings()" rows="5"
+            class="w-full px-4 py-3 text-xs rounded-2xl leading-relaxed dark:bg-ink-800 bg-ink-50 dark:text-ink-200 text-ink-800 border dark:border-ink-700 border-ink-200 outline-none focus:border-honey-500/60 focus:ring-1 focus:ring-honey-500/20 resize-none transition-all"></textarea>
+          <button @click="systemPrompt='You are Beesto AI, a highly capable, friendly, and articulate AI assistant. Provide clear, accurate, and well-formatted responses. Use markdown for code blocks, tables, and lists when it adds clarity.'; saveSettings(); showToast('Reset!')"
+            class="mt-1.5 text-[11px] text-honey-500 hover:text-honey-400 font-medium transition-colors">↺ Reset to default</button>
+        </div>
+      </div>
+
+      <!-- ROUTING -->
+      <div x-show="settingsTab==='routing'" class="space-y-3">
+        <p class="text-xs dark:text-ink-400 text-ink-600 leading-relaxed mb-4">Beesto AI automatically detects file types and routes to the best model. No switching needed.</p>
+        <div class="route-card"><div class="route-icon bg-purple-500/10 text-purple-500">🖼️</div><div class="flex-1"><p class="text-xs font-bold dark:text-ink-200 text-ink-700">Images (JPG, PNG, WebP, GIF…)</p><p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Groq LLaMA 4 Scout — full multimodal analysis. <strong class="dark:text-ink-300 text-ink-600">No detail param sent to Groq</strong> (it doesn't support it).</p></div><span class="text-[10px] px-2 py-1 rounded-full dark:bg-purple-500/15 bg-purple-100 dark:text-purple-400 text-purple-700 font-bold shrink-0">Vision API</span></div>
+        <div class="route-card"><div class="route-icon bg-red-500/10 text-red-500">📄</div><div class="flex-1"><p class="text-xs font-bold dark:text-ink-200 text-ink-700">PDF Documents</p><p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Up to 40 pages extracted in-browser (150k chars), injected as structured context with page markers.</p></div><span class="text-[10px] px-2 py-1 rounded-full dark:bg-red-500/15 bg-red-100 dark:text-red-400 text-red-700 font-bold shrink-0">PDF.js</span></div>
+        <div class="route-card"><div class="route-icon bg-blue-500/10 text-blue-500">🎵</div><div class="flex-1"><p class="text-xs font-bold dark:text-ink-200 text-ink-700">Audio (MP3, WAV, M4A…)</p><p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Groq Whisper Large v3 — fast, accurate transcription, then analysed by text model.</p></div><span class="text-[10px] px-2 py-1 rounded-full dark:bg-blue-500/15 bg-blue-100 dark:text-blue-400 text-blue-700 font-bold shrink-0">Whisper</span></div>
+        <div class="route-card"><div class="route-icon bg-indigo-500/10 text-indigo-500">🎬</div><div class="flex-1"><p class="text-xs font-bold dark:text-ink-200 text-ink-700">Video (MP4, WebM, MPEG…)</p><p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Audio extracted and transcribed by Whisper, then analysed by text model.</p></div><span class="text-[10px] px-2 py-1 rounded-full dark:bg-indigo-500/15 bg-indigo-100 dark:text-indigo-400 text-indigo-700 font-bold shrink-0">Whisper</span></div>
+        <div class="route-card"><div class="route-icon bg-green-500/10 text-green-500">💬</div><div class="flex-1"><p class="text-xs font-bold dark:text-ink-200 text-ink-700">Text / Code files</p><p class="text-[11px] dark:text-ink-500 text-ink-400 mt-0.5">Sent directly to your selected text model, wrapped in code blocks.</p></div><span class="text-[10px] px-2 py-1 rounded-full dark:bg-green-500/15 bg-green-100 dark:text-green-400 text-green-700 font-bold shrink-0">Auto</span></div>
+      </div>
+
+      <!-- APPEARANCE -->
+      <div x-show="settingsTab==='appearance'" class="space-y-5">
+        <div>
+          <label class="settings-label">Theme</label>
+          <p class="settings-hint mb-3">Choose how Beesto AI looks</p>
+          <div class="grid grid-cols-3 gap-2">
+            <template x-for="t in [{id:'light',label:'Light',icon:'☀️',desc:'Clean white'},{id:'dark',label:'Dark',icon:'🌙',desc:'Easy on eyes'},{id:'system',label:'System',icon:'💻',desc:'Auto-detect'}]" :key="t.id">
+              <button @click="theme=t.id; applyTheme(); saveSettings()"
+                :class="theme===t.id ? 'dark:bg-honey-500/15 bg-honey-50 dark:border-honey-500/50 border-honey-400 dark:text-honey-400 text-honey-700' : 'dark:bg-ink-800/50 bg-ink-50 dark:border-ink-700/50 border-ink-200 dark:text-ink-400 text-ink-600 dark:hover:bg-ink-800 hover:bg-ink-100'"
+                class="flex flex-col items-center gap-1 py-4 rounded-2xl border text-xs font-medium transition-all">
+                <span x-text="t.icon" class="text-2xl mb-1"></span>
+                <span x-text="t.label" class="font-semibold"></span>
+                <span x-text="t.desc" class="text-[10px] opacity-60"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- DATA -->
+      <div x-show="settingsTab==='data'" class="space-y-4">
+        <div>
+          <label class="settings-label">Conversation History</label>
+          <p class="settings-hint mb-3">Stored only in your browser — never on any server.</p>
+          <div class="flex gap-2">
+            <button @click="exportAllChats()"
+              class="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-semibold dark:bg-ink-800 bg-ink-50 dark:text-ink-300 text-ink-700 border dark:border-ink-700 border-ink-200 dark:hover:bg-ink-700 hover:bg-ink-100 transition-all">
+              📥 Export all chats
+            </button>
+            <button @click="clearAllChats()"
+              class="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-semibold bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 transition-all">
+              🗑️ Clear all chats
+            </button>
+          </div>
+        </div>
+        <button @click="if(confirm('Reset all settings? Chats will be kept.')){userName='';systemPrompt='You are Beesto AI, a highly capable, friendly, and articulate AI assistant. Provide clear, accurate, and well-formatted responses. Use markdown for code blocks, tables, and lists when it adds clarity.';apiKeys={openrouter:'',openai:'',gemini:'',xai:''};theme='dark';applyTheme();saveSettings();showOnboarding=true;showSettings=false;}"
+          class="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-semibold dark:bg-ink-800 bg-ink-50 dark:text-ink-400 text-ink-600 border dark:border-ink-700 border-ink-200 dark:hover:bg-ink-700 hover:bg-ink-100 transition-all">
+          ⚙️ Reset all settings
+        </button>
+        <p class="text-center text-[11px] dark:text-ink-700 text-ink-400 pt-2 border-t dark:border-ink-800 border-ink-200">
+          Beesto AI v5.0 · Vision fixed · PDF analysis · Private
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
